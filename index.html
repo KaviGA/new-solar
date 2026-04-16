@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Real Solar System Pro</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#ui {
+ position:absolute;
+ top:10px;
+ left:10px;
+ color:white;
+ background:rgba(0,0,0,0.6);
+ padding:10px;
+ font-family:Arial;
+ max-width:250px;
+}
+.label {
+ position:absolute;
+ color:white;
+ font-size:12px;
+ pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">🌌 Solar System Loaded</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+
+// ===== BASIC SETUP =====
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 5000);
+camera.position.set(0,100,200);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// ===== LIGHT =====
+const sunLight = new THREE.PointLight(0xffffff, 2, 3000);
+scene.add(sunLight);
+
+// ===== SUN =====
+const sun = new THREE.Mesh(
+ new THREE.SphereGeometry(20,64,64),
+ new THREE.MeshBasicMaterial({color:0xffaa00})
+);
+scene.add(sun);
+
+// glow
+const glow = new THREE.Mesh(
+ new THREE.SphereGeometry(25,64,64),
+ new THREE.MeshBasicMaterial({
+   color:0xffaa00,
+   transparent:true,
+   opacity:0.2
+ })
+);
+scene.add(glow);
+
+// ===== PLANET DATA (scaled) =====
+const planetsData = [
+ {name:"Mercury", size:2, dist:30, speed:0.02, color:0xaaaaaa},
+ {name:"Venus", size:3, dist:45, speed:0.015, color:0xffcc88},
+ {name:"Earth", size:4, dist:60, speed:0.01, color:0x2266ff},
+ {name:"Mars", size:3, dist:75, speed:0.008, color:0xff5533},
+ {name:"Jupiter", size:10, dist:110, speed:0.004, color:0xffaa88},
+ {name:"Saturn", size:8, dist:150, speed:0.003, color:0xffddaa},
+ {name:"Uranus", size:6, dist:190, speed:0.002, color:0x66ffff},
+ {name:"Neptune", size:6, dist:230, speed:0.0015, color:0x3366ff}
+];
+
+const planets = [];
+
+// ===== CREATE PLANETS =====
+planetsData.forEach(data=>{
+ const orbit = new THREE.Object3D();
+ scene.add(orbit);
+
+ const mesh = new THREE.Mesh(
+  new THREE.SphereGeometry(data.size,32,32),
+  new THREE.MeshStandardMaterial({color:data.color})
+ );
+
+ mesh.position.x = data.dist;
+ orbit.add(mesh);
+
+ // label
+ const label = document.createElement("div");
+ label.className = "label";
+ label.innerText = data.name;
+ document.body.appendChild(label);
+
+ planets.push({mesh, orbit, speed:data.speed, name:data.name, label});
+});
+
+// ===== EARTH MOON =====
+const earthObj = planets.find(p=>p.name==="Earth");
+const moonOrbit = new THREE.Object3D();
+earthObj.mesh.add(moonOrbit);
+
+const moon = new THREE.Mesh(
+ new THREE.SphereGeometry(1,32,32),
+ new THREE.MeshStandardMaterial({color:0xaaaaaa})
+);
+moon.position.x = 8;
+moonOrbit.add(moon);
+
+// ===== SATURN RINGS =====
+const saturnObj = planets.find(p=>p.name==="Saturn");
+const ring = new THREE.Mesh(
+ new THREE.RingGeometry(10,16,64),
+ new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide})
+);
+ring.rotation.x = Math.PI/2;
+saturnObj.mesh.add(ring);
+
+// ===== GALAXY =====
+const starGeo = new THREE.BufferGeometry();
+const starCount = 8000;
+const starPos = [];
+
+for(let i=0;i<starCount;i++){
+ const r = Math.random()*1000;
+ const angle = r*0.3;
+ starPos.push(
+  Math.cos(angle)*r,
+  (Math.random()-0.5)*50,
+  Math.sin(angle)*r
+ );
+}
+starGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos,3));
+
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({size:1})));
+
+// ===== NEBULA =====
+const nebula = new THREE.Mesh(
+ new THREE.SphereGeometry(2000,64,64),
+ new THREE.MeshBasicMaterial({
+  color:0x220044,
+  side:THREE.BackSide,
+  transparent:true,
+  opacity:0.3
+ })
+);
+scene.add(nebula);
+
+// ===== SHIP =====
+const ship = new THREE.Mesh(
+ new THREE.ConeGeometry(3,8,8),
+ new THREE.MeshBasicMaterial({color:0x00ffcc})
+);
+ship.rotation.x = Math.PI/2;
+scene.add(ship);
+
+// ===== CONTROLS =====
+const keys = {};
+window.addEventListener("keydown",e=>keys[e.key]=true);
+window.addEventListener("keyup",e=>keys[e.key]=false);
+
+// ===== CLICK INFO =====
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const ui = document.getElementById("ui");
+
+window.addEventListener("click",e=>{
+ mouse.x = (e.clientX/innerWidth)*2-1;
+ mouse.y = -(e.clientY/innerHeight)*2+1;
+ raycaster.setFromCamera(mouse,camera);
+
+ const objs = planets.map(p=>p.mesh);
+ const hit = raycaster.intersectObjects(objs);
+
+ if(hit.length){
+   const planet = planets.find(p=>p.mesh===hit[0].object);
+   ui.innerHTML = `🪐 ${planet.name}`;
+ }
+});
+
+// ===== ANIMATION =====
+function animate(){
+ requestAnimationFrame(animate);
+
+ // orbits
+ planets.forEach(p=>{
+  p.orbit.rotation.y += p.speed;
+  p.mesh.rotation.y += 0.01;
+ });
+
+ moonOrbit.rotation.y += 0.03;
+
+ // ship movement
+ if(keys["w"]) ship.position.z -= 2;
+ if(keys["s"]) ship.position.z += 2;
+ if(keys["a"]) ship.position.x -= 2;
+ if(keys["d"]) ship.position.x += 2;
+
+ // camera follow
+ camera.position.lerp(
+  new THREE.Vector3(ship.position.x, ship.position.y+50, ship.position.z+120),
+  0.05
+ );
+ camera.lookAt(ship.position);
+
+ // labels update
+ planets.forEach(p=>{
+  const vector = p.mesh.position.clone().project(camera);
+  const x = (vector.x * 0.5 + 0.5) * innerWidth;
+  const y = (-vector.y * 0.5 + 0.5) * innerHeight;
+  p.label.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`;
+ });
+
+ renderer.render(scene,camera);
+}
+animate();
+
+</script>
+</body>
+</html>
